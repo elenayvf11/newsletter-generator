@@ -11,7 +11,7 @@ phone or being stored by the app**.
 | Question | Decision |
 |---|---|
 | Dev machine | **Mac available** → install Xcode for the iOS Simulator and local dev builds (`npx expo run:ios`). EAS cloud builds still used for TestFlight/App Store. |
-| Look & feel | Reuse the **6 color themes and the newsletter HTML from epistle** (see §9). |
+| Look & feel | Reuse the **6 color themes and the newsletter HTML from epistle** (see §7). |
 | Page format | Default **"Scroll" format: one continuous page**, so an emailed PDF reads top-to-bottom with no page breaks. Offer **A4 (paged)** as a secondary option for printing. |
 | Drafts | **Save draft text and draft photos**, on-device only (see §2 "Draft photos"). |
 
@@ -248,7 +248,7 @@ src/
 
 ---
 
-## 9. Porting from epistle (`elenayvf11/epistle`)
+## 7. Porting from epistle (`elenayvf11/epistle`)
 
 The web app's newsletter rendering is already a **pure TypeScript function that
 returns an HTML string with inline styles**. That's exactly what `expo-print`
@@ -290,7 +290,7 @@ heading. The photo placement rule stays exactly as epistle does it.
 
 ---
 
-## 7. Risks & gotchas
+## 8. Risks & gotchas
 
 - **Large photos → huge PDFs / memory crashes.** Always resize before
   embedding. Target < 5 MB per PDF so it emails cleanly.
@@ -305,7 +305,7 @@ heading. The photo placement rule stays exactly as epistle does it.
 
 ---
 
-## 8. Open questions
+## 9. Open questions
 
 1. Should exporting a newsletter delete its draft photos by default, or keep
    them until you delete the draft?
