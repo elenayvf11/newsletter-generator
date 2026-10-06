@@ -11,7 +11,7 @@ phone or being stored by the app**.
 | Question | Decision |
 |---|---|
 | Dev machine | **Mac available** → install Xcode for the iOS Simulator and local dev builds (`npx expo run:ios`). EAS cloud builds still used for TestFlight/App Store. |
-| Look & feel | Reuse the **color templates from epistle-email.com** (port the theme CSS/tokens). |
+| Look & feel | Reuse the **6 color themes and the newsletter HTML from epistle** (see §9). |
 | Page format | Default **"Scroll" format: one continuous page**, so an emailed PDF reads top-to-bottom with no page breaks. Offer **A4 (paged)** as a secondary option for printing. |
 | Drafts | **Save draft text and draft photos**, on-device only (see §2 "Draft photos"). |
 
@@ -248,6 +248,48 @@ src/
 
 ---
 
+## 9. Porting from epistle (`elenayvf11/epistle`)
+
+The web app's newsletter rendering is already a **pure TypeScript function that
+returns an HTML string with inline styles**. That's exactly what `expo-print`
+and a WebView need, so most of it moves over as-is.
+
+| epistle file | What it has | In the iOS app |
+|---|---|---|
+| `lib/buildEmail.ts` → `COLOR_THEMES`, `ColorTheme` | 6 themes (Purple, Green, Blue, Yellow, Pink, Black & White), each with 15 color tokens | **Copy verbatim** → `src/templates/themes.ts`. |
+| `lib/buildEmail.ts` → `buildEpistleHtml` / `buildPreviewHtml` | 600px card layout: header (title + month/year), header photo, Q&A sections with photos interleaved, footer. Courier New + Georgia fonts (both built into iOS). | **Port** → `src/templates/epistle.ts`. Embed photos as base64 `data:` URIs directly, like `buildPreviewHtml` does (no `cid:` / MIME). Remove the "A print-ready PDF is attached to this email" banner. Keep the "made with epistle" footer link, or make it optional. Add `@page` CSS and a width option for the Scroll vs A4 formats. |
+| `lib/buildEmail.ts` → `escapeHtml`, `getCurrentMonthYear` | Helpers | Copy. |
+| `lib/buildEmail.ts` → `buildMimeMessage` | Gmail MIME assembly | **Drop**: the Share Sheet replaces it. |
+| `lib/buildPdf.tsx` (`@react-pdf/renderer`) | A separate PDF layout that duplicates the HTML one | **Drop**: `expo-print` renders the same HTML to PDF, so there's one template instead of two. |
+| `lib/compressImage.ts` | Canvas resize to 1200px, JPEG 0.75 | Replace with `expo-image-manipulator` using the **same 1200px / 0.75 settings**, which also strips EXIF. |
+| `lib/constants.ts` → `QUESTIONS`, `MAX_Q = 3`, `MAX_P = 5` | Guided prompts with `[child]` substitution | Copy. Use them as optional **section prompts** (see below). Consider raising the photo limit. |
+| `STARTER_CSS` / custom-CSS editor | Power-user styling | Skip for v1. Typing CSS on a phone is painful. |
+| `lib/auth.ts`, `app/api/*`, `next-auth`, `googleapis` | Google sign-in and Gmail drafts | **Drop entirely**: no accounts, no server. |
+| `app/globals.css` (pastel cards, 2px borders, hard 4px offset shadow, Space Mono) | Web UI look | Recreate in React Native styles so the app *feels* like epistle. Load Space Mono with `@expo-google-fonts/space-mono`. |
+| `privacy_policy.txt`, `terms_and_conditions.txt` | Legal text | Rewrite for the app ("no data collected, nothing leaves your device") and host it for the App Store listing. |
+
+### Content model: questions vs. free text
+
+epistle builds the newsletter from **child name + up to 3 answered prompts**.
+The iOS app keeps that structure but makes it more flexible:
+
+```ts
+type Section = { heading: string; body: string };   // heading = a prompt or custom text
+type Newsletter = {
+  childName: string;          // title becomes "✧ {name}'s Epistle ✧"
+  sections: Section[];        // defaults to one "General Update" section
+  photoIds: string[];         // first = header photo, then one after each section, rest at end
+  themeName: string;          // one of COLOR_THEMES
+  format: 'scroll' | 'a4';
+};
+```
+
+A new newsletter starts with a single **"General Update"** section (the free
+text box you described). "Add section" offers the epistle prompts or a custom
+heading. The photo placement rule stays exactly as epistle does it.
+
+---
+
 ## 7. Risks & gotchas
 
 - **Large photos → huge PDFs / memory crashes.** Always resize before
@@ -265,7 +307,8 @@ src/
 
 ## 8. Open questions
 
-1. Share the epistle-email.com theme source (CSS/Tailwind config or the repo)
-   so the color templates can be ported exactly.
-2. Should exporting a newsletter delete its draft photos by default, or keep
+1. Should exporting a newsletter delete its draft photos by default, or keep
    them until you delete the draft?
+2. Keep the "made with epistle" footer and the `✧ {name}'s Epistle ✧` title,
+   or make the title freely editable (e.g. "The Smith Family — Fall 2026")?
+3. Should the app keep the "epistle" name, or ship under a new one?
