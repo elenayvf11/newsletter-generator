@@ -103,7 +103,7 @@ export default function EditDraftScreen() {
         <Field
           value={draft.title}
           onChangeText={(title) => update((d) => ({ ...d, title }))}
-          placeholder="The Smith Family — Fall 2026"
+          placeholder="The Fujioka Family — Fall 2026"
         />
         <View style={{ height: 12 }} />
         <Label>Subtitle</Label>

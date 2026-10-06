@@ -14,7 +14,7 @@ phone or being stored by the app**.
 | Look & feel | Reuse the **6 color themes and the newsletter HTML from epistle** (see §7). |
 | Sharing format | The newsletter is sent as **pictures**, so it shows right in the conversation instead of as an attachment. **Text it** opens Messages with one picture per section. **Email it** opens Mail with the pictures in the body and an **A4 PDF** attached for printing. **Other apps** shares one tall picture (Gmail app, WhatsApp, Save Image). The earlier one-page PDF option is dropped. |
 | Drafts | **Save draft text and draft photos**, on-device only (see §2 "Draft photos"). Drafts **stay after export** until you delete them. |
-| Title | **Freely editable** (e.g. "The Smith Family — Fall 2026"), not tied to a child's name. |
+| Title | **Freely editable** (e.g. "The Fujioka Family — Fall 2026"), not tied to a child's name. |
 | App name | **Very Simple Newsletter Creator**. The epistle branding and the "made with epistle" link are removed. |
 
 ---
@@ -150,7 +150,7 @@ Everything runs on-device. One-way data flow:
 ```ts
 type Newsletter = {
   id: string;
-  title: string;          // e.g. "The Smith Family — Fall 2026"
+  title: string;          // e.g. "The Fujioka Family — Fall 2026"
   date: string;
   body: string;           // plain text (later: simple markdown)
   photos: Photo[];        // in-memory only, never persisted
@@ -287,7 +287,7 @@ The iOS app keeps that structure but makes it more flexible:
 ```ts
 type Section = { heading: string; body: string };   // heading = a prompt or custom text
 type Newsletter = {
-  title: string;              // free text, e.g. "The Smith Family — Fall 2026"
+  title: string;              // free text, e.g. "The Fujioka Family — Fall 2026"
   sections: Section[];        // defaults to one "General Update" section
   photoIds: string[];         // first = header photo, then one after each section, rest at end
   themeName: string;          // one of COLOR_THEMES
