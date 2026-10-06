@@ -5,8 +5,8 @@ import { ColorTheme } from './themes';
 // embedded as data: URIs (no cid:/MIME), the title is free text, and the
 // email-only banner and "made with epistle" link are gone.
 
-// The page is laid out at the A4 width (595 x 842 points). Both export formats
-// use the same HTML: "scroll" prints it onto one tall page, "a4" splits it.
+// Used for the print-ready PDF, laid out at A4 size (595 x 842 points).
+// The pictures for texts and email are drawn by NewsletterCards.tsx.
 export const PAGE_WIDTH = 595;
 export const A4_HEIGHT = 842;
 

@@ -29,7 +29,6 @@ export function newDraft(): Draft {
     sections: [{ id: randomUUID(), heading: 'General Update', body: '' }],
     photos: [],
     themeName: COLOR_THEMES[0].name,
-    format: 'scroll',
     createdAt: now,
     updatedAt: now,
   };
@@ -44,13 +43,6 @@ export function saveDraft(draft: Draft): void {
     draft.updatedAt,
     JSON.stringify(draft),
   );
-}
-
-/** Applies a change, bumps updatedAt and saves. */
-export function updateDraft(draft: Draft, patch: Partial<Draft>): Draft {
-  const next = { ...draft, ...patch, updatedAt: Date.now() };
-  saveDraft(next);
-  return next;
 }
 
 export function getDraft(id: string): Draft | null {

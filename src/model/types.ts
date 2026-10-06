@@ -1,5 +1,3 @@
-export type PageFormat = 'scroll' | 'a4';
-
 export interface Section {
   id: string;
   heading: string;
@@ -20,7 +18,6 @@ export interface Draft {
   sections: Section[];
   photos: DraftPhoto[]; // first = header photo, then one after each section, rest at the end
   themeName: string;
-  format: PageFormat;
   createdAt: number;
   updatedAt: number;
 }

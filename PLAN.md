@@ -12,7 +12,7 @@ phone or being stored by the app**.
 |---|---|
 | Dev machine | **Mac available** → install Xcode for the iOS Simulator and local dev builds (`npx expo run:ios`). EAS cloud builds still used for TestFlight/App Store. |
 | Look & feel | Reuse the **6 color themes and the newsletter HTML from epistle** (see §7). |
-| Page format | Default **"Scroll" format: one continuous page**, so an emailed PDF reads top-to-bottom with no page breaks. Offer **A4 (paged)** as a secondary option for printing. |
+| Sharing format | The newsletter is sent as **pictures**, so it shows right in the conversation instead of as an attachment. **Text it** opens Messages with one picture per section. **Email it** opens Mail with the pictures in the body and an **A4 PDF** attached for printing. **Other apps** shares one tall picture (Gmail app, WhatsApp, Save Image). The earlier one-page PDF option is dropped. |
 | Drafts | **Save draft text and draft photos**, on-device only (see §2 "Draft photos"). Drafts **stay after export** until you delete them. |
 | Title | **Freely editable** (e.g. "The Smith Family — Fall 2026"), not tied to a child's name. |
 | App name | **Very Simple Newsletter Creator**. The epistle branding and the "made with epistle" link are removed. |
@@ -213,6 +213,10 @@ src/
 
 ### Phase 1 — MVP: text + photos → PDF → share (1–2 weeks of evenings)
 
+> **Update:** sharing now sends pictures (see §0 "Sharing format"), drawn by
+> `src/templates/NewsletterCards.tsx` and captured with `react-native-view-shot`.
+> Messages and Mail open with them already attached (`expo-sms`, `expo-mail-composer`).
+>
 > **Status:** first version built. Drafts list, editor with autosave, the 6
 > epistle themes, a photo picker that needs no permission, One-page and A4 PDF
 > export, share sheet and print are all in place. Lint, typecheck and the iOS
