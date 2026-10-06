@@ -1,4 +1,4 @@
-# Newsletter Generator — Implementation Plan
+# Very Simple Newsletter Creator — Implementation Plan
 
 An iOS app where you type a newsletter, attach photos, and export a **PDF or
 image** you can email, text, print, or save — with **no photos ever leaving the
@@ -13,7 +13,9 @@ phone or being stored by the app**.
 | Dev machine | **Mac available** → install Xcode for the iOS Simulator and local dev builds (`npx expo run:ios`). EAS cloud builds still used for TestFlight/App Store. |
 | Look & feel | Reuse the **6 color themes and the newsletter HTML from epistle** (see §7). |
 | Page format | Default **"Scroll" format: one continuous page**, so an emailed PDF reads top-to-bottom with no page breaks. Offer **A4 (paged)** as a secondary option for printing. |
-| Drafts | **Save draft text and draft photos**, on-device only (see §2 "Draft photos"). |
+| Drafts | **Save draft text and draft photos**, on-device only (see §2 "Draft photos"). Drafts **stay after export** until you delete them. |
+| Title | **Freely editable** (e.g. "The Smith Family — Fall 2026"), not tied to a child's name. |
+| App name | **Very Simple Newsletter Creator**. The epistle branding and the "made with epistle" link are removed. |
 
 ---
 
@@ -57,13 +59,12 @@ Chosen approach: **local copies in the Caches folder**
   iOS encrypts it while the phone is locked.
 - **iOS excludes Caches from iCloud and iTunes backups.** That's why we use it
   instead of the Documents folder, which *is* backed up to iCloud by default.
-- Deleting a draft, or (optionally) exporting it, deletes its photo folder.
+- Deleting a draft deletes its photo folder (exporting does not).
   Deleting the app deletes everything.
 - Trade-off: iOS *may* clear Caches when the phone is very low on storage
   (rare). If that happens, the draft text stays and the app shows "Re-add
   photos" placeholders.
-- Optional setting: "Delete draft photos after export" (on by default) and
-  auto-delete drafts older than 30 days.
+- Possible later setting: auto-delete drafts older than N days.
 
 Alternative considered: **save references, not copies.** Store each photo's
 Photos-library ID and reload the original when the draft opens. The app never
@@ -211,6 +212,12 @@ src/
 - Add ESLint/Prettier, a basic `app.json` (name, bundle id, icon placeholder).
 
 ### Phase 1 — MVP: text + photos → PDF → share (1–2 weeks of evenings)
+
+> **Status:** first version built. Drafts list, editor with autosave, the 6
+> epistle themes, a photo picker that needs no permission, One-page and A4 PDF
+> export, share sheet and print are all in place. Lint, typecheck and the iOS
+> bundle pass. Still needs testing on a real iPhone, especially the one-page
+> PDF height and how many photos fit before it slows down.
 - Compose screen: title, multi-line body, "Add photos" (multi-select), reorder/remove.
 - Photo pipeline: pick → resize to ~1600px long edge, JPEG ~0.8 → `cacheDirectory/drafts/<id>/`.
 - Single autosaved draft (text + photo list) in `expo-sqlite`.
@@ -227,7 +234,7 @@ src/
 
 ### Phase 3 — Polish (1 week)
 - Multiple drafts list; delete-draft removes its photo folder.
-- Settings: "Delete draft photos after export", auto-expire old drafts.
+- Optional setting: auto-expire old drafts.
 - Simple formatting (bold, headings, bullet lists via lightweight markdown).
 - Live preview, page-break handling, large-photo performance.
 - Startup cleanup of any leftover temp files.
@@ -257,7 +264,7 @@ and a WebView need, so most of it moves over as-is.
 | epistle file | What it has | In the iOS app |
 |---|---|---|
 | `lib/buildEmail.ts` → `COLOR_THEMES`, `ColorTheme` | 6 themes (Purple, Green, Blue, Yellow, Pink, Black & White), each with 15 color tokens | **Copy verbatim** → `src/templates/themes.ts`. |
-| `lib/buildEmail.ts` → `buildEpistleHtml` / `buildPreviewHtml` | 600px card layout: header (title + month/year), header photo, Q&A sections with photos interleaved, footer. Courier New + Georgia fonts (both built into iOS). | **Port** → `src/templates/epistle.ts`. Embed photos as base64 `data:` URIs directly, like `buildPreviewHtml` does (no `cid:` / MIME). Remove the "A print-ready PDF is attached to this email" banner. Keep the "made with epistle" footer link, or make it optional. Add `@page` CSS and a width option for the Scroll vs A4 formats. |
+| `lib/buildEmail.ts` → `buildEpistleHtml` / `buildPreviewHtml` | 600px card layout: header (title + month/year), header photo, Q&A sections with photos interleaved, footer. Courier New + Georgia fonts (both built into iOS). | **Port** → `src/templates/newsletter.ts`. Embed photos as base64 `data:` URIs directly, like `buildPreviewHtml` does (no `cid:` / MIME). Remove the "A print-ready PDF is attached to this email" banner and the "made with epistle" link. The title is free text instead of `✧ {name}'s Epistle ✧`. Add `@page` CSS and a width option for the Scroll vs A4 formats. |
 | `lib/buildEmail.ts` → `escapeHtml`, `getCurrentMonthYear` | Helpers | Copy. |
 | `lib/buildEmail.ts` → `buildMimeMessage` | Gmail MIME assembly | **Drop**: the Share Sheet replaces it. |
 | `lib/buildPdf.tsx` (`@react-pdf/renderer`) | A separate PDF layout that duplicates the HTML one | **Drop**: `expo-print` renders the same HTML to PDF, so there's one template instead of two. |
@@ -276,7 +283,7 @@ The iOS app keeps that structure but makes it more flexible:
 ```ts
 type Section = { heading: string; body: string };   // heading = a prompt or custom text
 type Newsletter = {
-  childName: string;          // title becomes "✧ {name}'s Epistle ✧"
+  title: string;              // free text, e.g. "The Smith Family — Fall 2026"
   sections: Section[];        // defaults to one "General Update" section
   photoIds: string[];         // first = header photo, then one after each section, rest at end
   themeName: string;          // one of COLOR_THEMES
@@ -307,8 +314,4 @@ heading. The photo placement rule stays exactly as epistle does it.
 
 ## 9. Open questions
 
-1. Should exporting a newsletter delete its draft photos by default, or keep
-   them until you delete the draft?
-2. Keep the "made with epistle" footer and the `✧ {name}'s Epistle ✧` title,
-   or make the title freely editable (e.g. "The Smith Family — Fall 2026")?
-3. Should the app keep the "epistle" name, or ship under a new one?
+None blocking. Decisions so far are recorded in §0.
