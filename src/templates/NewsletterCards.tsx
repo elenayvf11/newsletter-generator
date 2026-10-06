@@ -1,8 +1,9 @@
 import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
-import { Draft, DraftPhoto, Section } from '../model/types';
+import { Draft, DraftPhoto } from '../model/types';
 import { photoExists, photoFile } from '../photos/photos';
+import { splitText } from './splitText';
 import { ColorTheme, getTheme } from './themes';
 
 // The newsletter drawn with native views so it can be captured as pictures
@@ -11,9 +12,19 @@ import { ColorTheme, getTheme } from './themes';
 
 export const CARD_WIDTH = 390;
 
-type Block = { kind: 'section'; section: Section } | { kind: 'photo'; photo: DraftPhoto };
+// Keeps every card shorter than the screen, so it can be scrolled fully into
+// view before it's captured (off-screen parts can come out blank).
+const MAX_PHOTO_HEIGHT = 440;
+const HEADER_PHOTO_MAX_HEIGHT = 360;
+const OUTER_PADDING = 14;
+const BOX_CHROME = 4 + 2 * 2; // shadow offset + borders
+const CONTENT_PADDING = 22;
 
-interface CardSpec {
+type Block =
+  | { kind: 'text'; heading?: string; text: string }
+  | { kind: 'photo'; photo: DraftPhoto };
+
+export interface CardSpec {
   header: boolean;
   headerPhoto?: DraftPhoto;
   blocks: Block[];
@@ -21,23 +32,35 @@ interface CardSpec {
 }
 
 /**
- * Splits a draft into picture-sized cards: the title, header photo and first
- * section; then each later section with the photo that follows it; then any
- * extra photos one per card. Photo order matches newsletter.ts.
+ * Splits a draft into picture-sized cards:
+ *   1. the title, with the header photo (or the first text if there's no photo);
+ *   2. each section's text, split across cards when it's long;
+ *   3. the photo that follows each section, on its own card;
+ *   4. any extra photos, one per card.
+ * Photo order matches newsletter.ts.
  */
 export function buildCards(draft: Draft): CardSpec[] {
   const photos = draft.photos.filter((p) => photoExists(draft.id, p));
-  const sections = draft.sections.filter((s) => s.heading.trim() || s.body.trim());
   const headerPhoto = photos.shift();
+  const titleCard: CardSpec = { header: true, headerPhoto, blocks: [], footer: false };
+  const cards: CardSpec[] = [titleCard];
 
-  const cards: CardSpec[] = [];
-  sections.forEach((section, i) => {
-    const blocks: Block[] = [{ kind: 'section', section }];
+  for (const section of draft.sections) {
+    const heading = section.heading.trim();
+    const chunks = splitText(section.body);
+    if (!heading && chunks.length === 0) continue;
+
+    (chunks.length ? chunks : ['']).forEach((text, i) => {
+      const block: Block = { kind: 'text', heading: i === 0 && heading ? heading : undefined, text };
+      const titleHasRoom = !titleCard.headerPhoto && titleCard.blocks.length === 0 && cards.length === 1;
+      if (titleHasRoom) titleCard.blocks.push(block);
+      else cards.push({ header: false, blocks: [block], footer: false });
+    });
+
     const photo = photos.shift();
-    if (photo) blocks.push({ kind: 'photo', photo });
-    cards.push({ header: i === 0, headerPhoto: i === 0 ? headerPhoto : undefined, blocks, footer: false });
-  });
-  if (cards.length === 0) cards.push({ header: true, headerPhoto, blocks: [], footer: false });
+    if (photo) cards.push({ header: false, blocks: [{ kind: 'photo', photo }], footer: false });
+  }
+
   photos.forEach((photo) => cards.push({ header: false, blocks: [{ kind: 'photo', photo }], footer: false }));
   cards[cards.length - 1].footer = true;
   return cards;
@@ -53,6 +76,8 @@ export function countImages(cards: CardSpec[]): number {
 export interface NewsletterCardsHandle {
   /** One view per card, in order. */
   cards: View[];
+  /** Each card's top edge, relative to the top of the stack. */
+  cardOffsets: number[];
   /** The whole stack, for a single tall picture. */
   all: View | null;
 }
@@ -60,49 +85,79 @@ export interface NewsletterCardsHandle {
 interface Props {
   draft: Draft;
   cards: CardSpec[];
+  width?: number;
   onImageLoaded: () => void;
 }
 
 export const NewsletterCards = forwardRef<NewsletterCardsHandle, Props>(function NewsletterCards(
-  { draft, cards, onImageLoaded },
+  { draft, cards, width = CARD_WIDTH, onImageLoaded },
   ref,
 ) {
   const theme = getTheme(draft.themeName);
   const cardRefs = useRef<(View | null)[]>([]);
+  const offsets = useRef<number[]>([]);
   const allRef = useRef<View>(null);
 
   useImperativeHandle(ref, () => ({
     get cards() {
       return cardRefs.current.slice(0, cards.length).filter((v): v is View => v !== null);
     },
+    get cardOffsets() {
+      return offsets.current.slice(0, cards.length);
+    },
     get all() {
       return allRef.current;
     },
   }));
 
-  const photo = (p: DraftPhoto, bordered: boolean) => (
-    <Image
-      key={p.id}
-      source={{ uri: photoFile(draft.id, p).uri }}
-      onLoad={onImageLoaded}
-      onError={onImageLoaded}
-      style={[
-        { width: '100%', aspectRatio: p.width / p.height },
-        bordered && { borderWidth: 2, borderColor: theme.imgBorder },
-      ]}
-    />
-  );
+  const boxWidth = width - OUTER_PADDING * 2 - BOX_CHROME;
+
+  const headerImage = (p: DraftPhoto) => {
+    const height = Math.min(boxWidth / (p.width / p.height), HEADER_PHOTO_MAX_HEIGHT);
+    return (
+      <Image
+        source={{ uri: photoFile(draft.id, p).uri }}
+        onLoad={onImageLoaded}
+        onError={onImageLoaded}
+        resizeMode="cover"
+        style={{ width: boxWidth, height }}
+      />
+    );
+  };
+
+  const framedImage = (p: DraftPhoto) => {
+    const aspect = p.width / p.height;
+    const available = boxWidth - CONTENT_PADDING * 2;
+    const imgWidth = Math.min(available, MAX_PHOTO_HEIGHT * aspect);
+    return (
+      <Image
+        source={{ uri: photoFile(draft.id, p).uri }}
+        onLoad={onImageLoaded}
+        onError={onImageLoaded}
+        style={{
+          width: imgWidth,
+          height: imgWidth / aspect,
+          alignSelf: 'center',
+          borderWidth: 2,
+          borderColor: theme.imgBorder,
+        }}
+      />
+    );
+  };
 
   return (
-    <View ref={allRef} collapsable={false} style={{ width: CARD_WIDTH, backgroundColor: theme.bodyBg }}>
+    <View ref={allRef} collapsable={false} style={{ width, backgroundColor: theme.bodyBg }}>
       {cards.map((card, i) => (
         <View
           key={i}
           ref={(v) => {
             cardRefs.current[i] = v;
           }}
+          onLayout={(e) => {
+            offsets.current[i] = e.nativeEvent.layout.y;
+          }}
           collapsable={false}
-          style={{ padding: 14, backgroundColor: theme.bodyBg }}
+          style={{ padding: OUTER_PADDING, backgroundColor: theme.bodyBg }}
         >
           <ShadowBox theme={theme}>
             {card.header && (
@@ -117,27 +172,21 @@ export const NewsletterCards = forwardRef<NewsletterCardsHandle, Props>(function
                 ) : null}
               </View>
             )}
-            {card.headerPhoto && photo(card.headerPhoto, false)}
-            {card.blocks.length > 0 && (
-              <View style={[s.content, { backgroundColor: theme.contentBg }]}>
-                {card.blocks.map((block, j) => (
-                  <View key={j} style={j > 0 && { marginTop: 22 }}>
-                    {block.kind === 'section' ? (
-                      <>
-                        {block.section.heading.trim() ? (
-                          <Text style={[s.heading, { color: theme.questionColor }]}>
-                            {block.section.heading.toUpperCase()}
-                          </Text>
-                        ) : null}
-                        <Text style={[s.body, { color: theme.answerColor }]}>{block.section.body}</Text>
-                      </>
-                    ) : (
-                      photo(block.photo, true)
-                    )}
-                  </View>
-                ))}
+            {card.headerPhoto && headerImage(card.headerPhoto)}
+            {card.blocks.map((block, j) => (
+              <View key={j} style={[s.content, { backgroundColor: theme.contentBg }]}>
+                {block.kind === 'text' ? (
+                  <>
+                    {block.heading ? (
+                      <Text style={[s.heading, { color: theme.questionColor }]}>{block.heading.toUpperCase()}</Text>
+                    ) : null}
+                    {block.text ? <Text style={[s.body, { color: theme.answerColor }]}>{block.text}</Text> : null}
+                  </>
+                ) : (
+                  framedImage(block.photo)
+                )}
               </View>
-            )}
+            ))}
             {card.footer && (
               <View style={[s.footer, { backgroundColor: theme.footerBg, borderColor: theme.footerBorder }]}>
                 <Text style={[s.footerText, { color: theme.footerTextColor }]}>Sent with love {'♥'}</Text>
@@ -166,7 +215,7 @@ const s = StyleSheet.create({
   header: { borderBottomWidth: 2, paddingVertical: 18, paddingHorizontal: 20, alignItems: 'center' },
   title: { fontFamily: 'Courier New', fontWeight: 'bold', fontSize: 18, textAlign: 'center', letterSpacing: 0.5 },
   subtitle: { fontFamily: 'Courier New', fontSize: 12, marginTop: 4 },
-  content: { padding: 22 },
+  content: { padding: CONTENT_PADDING },
   heading: { fontFamily: 'Courier New', fontWeight: 'bold', fontSize: 12, letterSpacing: 1, marginBottom: 8 },
   body: { fontFamily: 'Georgia', fontSize: 16, lineHeight: 26 },
   footer: { borderTopWidth: 2, paddingVertical: 12, alignItems: 'center' },

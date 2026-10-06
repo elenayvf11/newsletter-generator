@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 
 import {
@@ -29,6 +29,9 @@ export default function PreviewScreen() {
   const [loadedImages, setLoadedImages] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const cardsRef = useRef<NewsletterCardsHandle>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const stackTop = useRef(0);
+  const cardWidth = Math.min(CARD_WIDTH, useWindowDimensions().width);
 
   if (!draft) {
     return (
@@ -52,7 +55,24 @@ export default function PreviewScreen() {
     }
   }
 
-  const pictures = () => capturePictures(draft, cardsRef.current?.cards ?? []);
+  const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  // Scrolls a card to the top of the preview so it's fully on screen when captured.
+  async function showCard(index: number) {
+    const offset = cardsRef.current?.cardOffsets[index] ?? 0;
+    scrollRef.current?.scrollTo({ y: stackTop.current + offset, animated: false });
+    await nextFrame();
+    await nextFrame();
+  }
+
+  async function pictures() {
+    try {
+      return await capturePictures(draft!, cardsRef.current?.cards ?? [], showCard);
+    } finally {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }
+  }
+
   const tallPicture = () => captureTallPicture(draft, cardsRef.current!.all!);
 
   const text = () =>
@@ -77,7 +97,7 @@ export default function PreviewScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={{ alignItems: 'center', paddingVertical: 12 }}>
+      <ScrollView ref={scrollRef} contentContainerStyle={{ alignItems: 'center', paddingVertical: 12 }}>
         <Text style={[styles.subtitle, { marginBottom: 8, paddingHorizontal: 16, textAlign: 'center' }]}>
           {cards.length === 1
             ? 'This is the picture people will see.'
@@ -88,11 +108,17 @@ export default function PreviewScreen() {
             Some photos were cleared by iOS to free up space. Re-add them in the editor.
           </Text>
         )}
-        <View style={{ width: CARD_WIDTH }}>
+        <View
+          style={{ width: cardWidth }}
+          onLayout={(e) => {
+            stackTop.current = e.nativeEvent.layout.y;
+          }}
+        >
           <NewsletterCards
             ref={cardsRef}
             draft={draft}
             cards={cards}
+            width={cardWidth}
             onImageLoaded={() => setLoadedImages((n) => n + 1)}
           />
         </View>

@@ -52,24 +52,40 @@ export async function createPdf(draft: Draft): Promise<File> {
   return keepAs(uri, `${baseName(draft)}.pdf`);
 }
 
-async function capture(view: View, name: string): Promise<File> {
-  const uri = await captureRef(view, { format: 'jpg', quality: 0.9, result: 'tmpfile' });
+async function capture(view: View, name: string, renderInContext = false): Promise<File> {
+  const uri = await captureRef(view, {
+    format: 'jpg',
+    quality: 0.9,
+    result: 'tmpfile',
+    useRenderInContext: renderInContext,
+  });
   return keepAs(uri, name);
 }
 
-/** One picture per card, in order. */
-export async function capturePictures(draft: Draft, cards: View[]): Promise<File[]> {
+/**
+ * One picture per card, in order. `showCard` must scroll the card fully into
+ * view first: the default iOS capture can leave off-screen parts blank.
+ */
+export async function capturePictures(
+  draft: Draft,
+  cards: View[],
+  showCard: (index: number) => Promise<void>,
+): Promise<File[]> {
   const base = baseName(draft);
   const files: File[] = [];
   for (let i = 0; i < cards.length; i++) {
+    await showCard(i);
     files.push(await capture(cards[i], cards.length > 1 ? `${base} ${i + 1}.jpg` : `${base}.jpg`));
   }
   return files;
 }
 
-/** The whole newsletter as one tall picture. */
+/**
+ * The whole newsletter as one tall picture. It's taller than the screen, so it
+ * uses the layer-rendering capture, which view-shot recommends for large views.
+ */
 export function captureTallPicture(draft: Draft, all: View): Promise<File> {
-  return capture(all, `${baseName(draft)} (full).jpg`);
+  return capture(all, `${baseName(draft)} (full).jpg`, true);
 }
 
 /** Opens Messages with the pictures attached, so they show right in the conversation. */
