@@ -6,6 +6,17 @@ phone or being stored by the app**.
 
 ---
 
+## 0. Decisions made
+
+| Question | Decision |
+|---|---|
+| Dev machine | **Mac available** → install Xcode for the iOS Simulator and local dev builds (`npx expo run:ios`). EAS cloud builds still used for TestFlight/App Store. |
+| Look & feel | Reuse the **color templates from epistle-email.com** (port the theme CSS/tokens). |
+| Page format | Default **"Scroll" format: one continuous page**, so an emailed PDF reads top-to-bottom with no page breaks. Offer **A4 (paged)** as a secondary option for printing. |
+| Drafts | **Save draft text and draft photos**, on-device only (see §2 "Draft photos"). |
+
+---
+
 ## 1. Product flow
 
 ```
@@ -27,14 +38,41 @@ email) integration to build or maintain. The app's job ends at "here is a file."
 | Concern | How it is handled |
 |---|---|
 | Photo library access | Use the iOS system photo picker (`PHPickerViewController`, exposed by `expo-image-picker`). It runs **outside the app's process**; the app receives only the photos the user taps. On iOS 14+ this needs **no photo-library permission prompt at all**. |
-| Photos stored by the app | Selected photos live only in the app's temporary cache while you edit. They are deleted after export and on next launch. Nothing is written to a database. |
+| Photos stored by the app | Only resized, metadata-stripped copies of the photos you picked, kept in the app's private **Caches** folder for drafts (see below). Never uploaded, never in iCloud backups, deleted with the draft. |
 | Photos uploaded | There is **no backend and no network code**. No accounts, analytics, or crash reporters that could transmit content. |
 | Hidden metadata (GPS location, device, date) in photos | Every photo is re-encoded (resized + compressed) before going into the newsletter, which strips EXIF/GPS data. Important: photos of kids often carry home location in EXIF. |
 | Saving the output | Prefer the Share Sheet ("Save Image" / "Save to Files") so the app never needs Photos permission. If a direct "Save to Photos" button is added later, request only *add-only* permission. |
 | App Store privacy label | Can honestly declare **"Data Not Collected."** |
 
-What *is* stored: optionally, the draft **text** (and layout choice) so you
-don't lose your writing. Photos are re-picked if you reopen a draft.
+### Draft photos: saving them without "storing photos on the internet"
+
+The goal is that photos never leave the phone. Saving a draft's photos on the
+phone itself fits that goal, as long as we control *where* on the phone they go.
+
+Chosen approach: **local copies in the Caches folder**
+
+- When you pick a photo, the app saves a resized copy (EXIF/GPS stripped) to
+  `FileSystem.cacheDirectory/drafts/<draftId>/`.
+- That folder is in the app's private sandbox. Other apps can't read it, and
+  iOS encrypts it while the phone is locked.
+- **iOS excludes Caches from iCloud and iTunes backups.** That's why we use it
+  instead of the Documents folder, which *is* backed up to iCloud by default.
+- Deleting a draft, or (optionally) exporting it, deletes its photo folder.
+  Deleting the app deletes everything.
+- Trade-off: iOS *may* clear Caches when the phone is very low on storage
+  (rare). If that happens, the draft text stays and the app shows "Re-add
+  photos" placeholders.
+- Optional setting: "Delete draft photos after export" (on by default) and
+  auto-delete drafts older than 30 days.
+
+Alternative considered: **save references, not copies.** Store each photo's
+Photos-library ID and reload the original when the draft opens. The app never
+holds a copy, but it needs a photo-library permission prompt (limited access),
+and a photo deleted from the library would also disappear from the draft. We
+might offer this later as a setting, but it isn't the default.
+
+Draft text and layout/theme choice are stored in `expo-sqlite`, along with the
+list of photo file names, captions, and order for each draft.
 
 ---
 
@@ -130,11 +168,18 @@ type Photo = {
 
 Use **one HTML/CSS template per layout** as the source of truth:
 
-- **PDF:** inject text + base64 images into the HTML → `expo-print` → PDF
-  (proper US Letter / A4 pages, prints cleanly).
+- **PDF, Scroll format (default):** render the HTML in a hidden WebView,
+  measure `document.body.scrollHeight`, then call
+  `printToFileAsync({ html, width: 595, height: measuredHeight })`. The result
+  is a **single tall page**, so the reader just scrolls in Mail or Preview.
+  (595pt = A4 width, so it reads at the same scale as the paged version.)
+- **PDF, A4 format:** same HTML, `width: 595, height: 842`, with CSS
+  `break-inside: avoid` on photos. Use this one for printing.
 - **Image:** render the same HTML in a `react-native-webview` preview (or an
-  equivalent RN view) and capture it with `react-native-view-shot`. For long
-  newsletters, export one image per page so texts aren't absurdly tall.
+  equivalent RN view) and capture it with `react-native-view-shot`. Scroll format
+  exports one tall image, which also works pasted **inline in an email body**
+  (no attachment to open). For texting very long newsletters, offer splitting
+  into several images.
 - **Preview** in the app uses the same HTML so what you see is what you get.
 
 This also lets you port templates/CSS straight from epistle-email.com.
@@ -167,19 +212,22 @@ src/
 
 ### Phase 1 — MVP: text + photos → PDF → share (1–2 weeks of evenings)
 - Compose screen: title, multi-line body, "Add photos" (multi-select), reorder/remove.
-- Photo pipeline: pick → resize to ~1600px long edge, JPEG ~0.8 → cache.
-- One "Classic" HTML template (header, date, body, photo grid).
-- Export PDF → Share Sheet. Test Mail, Messages, Print, Save to Files.
-- Delete cached photos and the generated file after sharing.
+- Photo pipeline: pick → resize to ~1600px long edge, JPEG ~0.8 → `cacheDirectory/drafts/<id>/`.
+- Single autosaved draft (text + photo list) in `expo-sqlite`.
+- One template using the ported epistle-email.com color themes.
+- Export **Scroll-format PDF** → Share Sheet. Test Mail (scrolls as one page), Messages, Save to Files.
+- Delete the generated file after sharing.
 - ✅ **Done when** you can send a real newsletter to family from your phone.
 
 ### Phase 2 — Image export & layouts (1 week)
-- Export as PNG/JPEG (per page) for texting.
+- Export as one tall PNG/JPEG (optionally split) for texting / inline email.
+- A4 paged PDF option for printing.
 - 2–3 templates (classic, photo grid, photo-first), color/font themes.
 - Photo captions.
 
 ### Phase 3 — Polish (1 week)
-- Text-only draft autosave + drafts list.
+- Multiple drafts list; delete-draft removes its photo folder.
+- Settings: "Delete draft photos after export", auto-expire old drafts.
 - Simple formatting (bold, headings, bullet lists via lightweight markdown).
 - Live preview, page-break handling, large-photo performance.
 - Startup cleanup of any leftover temp files.
@@ -217,8 +265,7 @@ src/
 
 ## 8. Open questions
 
-1. Do you have a Mac? (Not required, but changes the dev loop.)
-2. Which epistle-email.com templates/styles do you want to carry over?
-3. PDF page size: US Letter, A4, or a single long scrolling page?
-4. Should drafts persist text at all, or should the app forget everything
-   after each export (maximum privacy)?
+1. Share the epistle-email.com theme source (CSS/Tailwind config or the repo)
+   so the color templates can be ported exactly.
+2. Should exporting a newsletter delete its draft photos by default, or keep
+   them until you delete the draft?
